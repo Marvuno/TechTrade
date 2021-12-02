@@ -6,6 +6,10 @@ from datetime import timedelta, datetime
 import pandas_market_calendars as mcal
 import openpyxl
 import time
+import cufflinks as cf
+import plotly.offline as plyo
+import plotly.io as pio
+import kaleido
 
 KEY = "K22TH1A5A9LN8LCB"  # Alpha Vantage API Key
 URL = "https://www.alphavantage.co/query?"
@@ -79,14 +83,28 @@ def plot(stock):
     df = algorithm(stock)
     if df is None:
         return False
-    df.dropna(subset=['K', 'D', 'J']).iloc[::-1].plot(x='Date', y=['K', 'D', 'J'], figsize=(10, 4),
-                                                      title=f"{stock} KDJ Plot")
+    # Display KDJ and MACD
+    df.dropna(subset=['K', 'D', 'J']).iloc[::-1].plot(x='Date', y=['K', 'D', 'J'], figsize=(16, 4),
+                                                      color=["orange", "blue", "purple"], title=f"{stock} KDJ Plot")
+    ax = df.dropna(subset=['DIF', 'DEA']).iloc[::-1].plot(x='Date', y=['DIF', 'DEA'], kind='line', figsize=(16, 4),
+                                                          color=["orange", "blue"], title=f"{stock} MACD Plot")
+    df = df.dropna(subset=['MACD']).iloc[::-1]
+    colors = ["red" if i < 0 else "green" for i in df['MACD']]
+    df.plot(x='Date', y='MACD', kind='bar', color=colors, ax=ax)
     plt.show()
-    ax = df.dropna(subset=['DIF', 'DEA']).iloc[::-1].plot(x='Date', y=['DIF', 'DEA'], kind='line', figsize=(10, 4),
-                                                          title=f"{stock} MACD Plot")
-    df.dropna(subset=['MACD']).iloc[::-1].plot(x='Date', y='MACD', kind='bar', ax=ax)
-    plt.show()
-    print(df.to_string())
+
+    # Display Candlestick Chart, Trendline, BOLL, RSI and ADX
+    pio.renderers.default = 'browser'
+    quotes = df[['Open', 'Close', 'High', 'Low']]
+    quotes = quotes.set_index(df['Date'])
+    qf = cf.QuantFig(quotes, title=f"{stock} Price", legend='top', name=stock)
+    qf.add_trendline(date0=datetime.strptime(df['Date'].iloc[0], '%Y-%m-%d').strftime('%Y-%m-%d'),
+                     date1=datetime.strptime(df['Date'].iloc[-1], '%Y-%m-%d').strftime('%Y-%m-%d'))
+    qf.add_bollinger_bands(periods=14, boll_std=2)
+    qf.add_rsi(periods=14, color='purple')
+    qf.add_adx(periods=5)
+    plyo.iplot(qf.iplot(asFigure=True))
+    # print(df.iloc[::-1].to_string())
 
 
 def suggest(stock):
@@ -119,20 +137,25 @@ constituents = (pd.read_excel("Constituents.xlsx"))
 symbols = [symbol for symbol in constituents['Symbol']]
 # Free version of Alpha Vantage only allows 500 requests per day
 symbols = symbols[:500]
+
 # Suggestion to buy/sell stock
 stock_assessed = []
 stock_buy = []
 stock_sell = []
-for i in symbols:
-    decision = suggest(i)
-    if decision == "Buy":
-        stock_buy.append(i)
-    elif decision == "Sell":
-        stock_sell.append(i)
-    print(i)
-    stock_assessed.append(i)
-    # Free version of Alpha Vantage only allows 5 requests per minute
-    if len(stock_assessed) % 5 == 0:
-        time.sleep(60)
-print(f"BUY: {stock_buy}")
-print(f"Sell: {stock_sell}")
+
+plot("NVDA")
+# # Largest 100 stocks
+# symbols = symbols[:100]
+# for i in symbols:
+#     decision = suggest(i)
+#     if decision == "Buy":
+#         stock_buy.append(i)
+#     elif decision == "Sell":
+#         stock_sell.append(i)
+#     print(i)
+#     stock_assessed.append(i)
+#     # Free version of Alpha Vantage only allows 5 requests per minute
+#     if len(stock_assessed) % 5 == 0:
+#         time.sleep(60)
+# print(f"BUY: {stock_buy}")
+# print(f"Sell: {stock_sell}")
